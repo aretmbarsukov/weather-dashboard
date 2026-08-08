@@ -322,7 +322,21 @@ export default function App() {
                 }
             }
 
-            /* 3. COUNTRY FALLBACK */
+            /* 3. UKRAINIAN TRANSLITERATION */
+
+            if (!location) {
+                const translit = transliterateUAToEN(q);
+
+                if (translit && translit !== q) {
+                    try {
+                        location = await geoSearch(translit);
+                    } catch (e) {
+                        console.warn("Transliteration search failed");
+                    }
+                }
+            }
+
+            /* 4. COUNTRY FALLBACK */
 
             if (!location) {
                 const commonCountries = [
@@ -1020,8 +1034,11 @@ export default function App() {
                             onClick={
                                 closeModal
                             }
+                            aria-label="Close weather modal"
                         >
-                            ✕
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            </svg>
                         </button>
 
                         <div className="modal-content">
