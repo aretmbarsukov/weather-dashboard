@@ -15,6 +15,10 @@ export function getNewsApiKey() {
   return getRuntimeApiKey("VITE_NEWSAPI_KEY", import.meta.env.VITE_NEWSAPI_KEY);
 }
 
+// local sample news for reliable fallback
+import sampleNews from "./data/news-sample.json";
+
+// local fallback sample (imported dynamically when needed)
 // GEO SEARCH
 export async function geoSearch(city) {
   const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${getOpenWeatherKey()}`;
@@ -75,104 +79,130 @@ export function getCityPhoto(city) {
   return `https://loremflickr.com/800/600/${encodedTags}?lock=${hash}`;
 }
 
+<<<<<<< HEAD
 // NEWS - виправлена версія з кращим fallback
 export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "", language = "" } = {}) {
-  const key = getNewsApiKey();
-  
-  // Спробуємо NewsAPI якщо є ключ
-  if (key) {
+=======
+// NEWS
+function parseRssItem(item) {
+  const title = item.querySelector("title")?.textContent || "No title";
+  const link = item.querySelector("link")?.textContent || "#";
+  const description = item.querySelector("description")?.textContent || "";
+  const pubDate = item.querySelector("pubDate")?.textContent || new Date().toISOString();
+  const enclosure = item.querySelector("enclosure");
+  const image = enclosure?.getAttribute("url") || null;
+  const sourceName = item.ownerDocument?.querySelector("channel > title")?.textContent || "News";
+
+  return {
+    title,
+    url: link,
+    description,
+    publishedAt: pubDate,
+    urlToImage: image,
+    source: { name: sourceName },
+  };
+}
+
+async function fetchRssFeed(url) {
+  const proxies = [
+    "https://api.allorigins.win/raw?url=",
+    "https://r.jina.ai/http://",
+    "https://thingproxy.freeboard.io/fetch/",
+  ];
+
+  for (const p of proxies) {
     try {
-      const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
-      const params = new URLSearchParams();
-      
-      if (q) params.append("q", q);
-      if (!q && country) params.append("country", country);
-      if (language) params.append("language", language);
-      params.append("page", String(page));
-      params.append("pageSize", String(pageSize));
-      params.append("sortBy", "publishedAt");
-
-      const url = `${base}?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: { "X-Api-Key": key }
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.articles && data.articles.length > 0) {
-          return data;
-        }
+      const proxyUrl = p + encodeURIComponent(url);
+      const res = await fetch(proxyUrl);
+      if (!res.ok) {
+        console.warn("proxy failed", p, res.status);
+        continue;
       }
+
+      const text = await res.text();
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "application/xml");
+      const items = Array.from(xml.querySelectorAll("item") || []).map(parseRssItem);
+      if (items && items.length) return items;
     } catch (err) {
-      console.warn("NewsAPI error:", err);
+      console.warn("proxy error", p, err);
+      continue;
     }
   }
 
-  // Fallback: отримуємо новини з публічних джерел
-  try {
-    const mockNews = [
-      {
-        title: "Weather Patterns Shift Across Europe",
-        description: "New climate data shows significant changes in European weather systems this season.",
-        url: "https://example.com/weather-europe",
-        urlToImage: "https://via.placeholder.com/800x600?text=Weather+Europe",
-        publishedAt: new Date().toISOString(),
-        source: { name: "Weather News" }
-      },
-      {
-        title: "Record Temperatures in Summer 2024",
-        description: "Global weather stations report unprecedented temperature records this summer.",
-        url: "https://example.com/temp-records",
-        urlToImage: "https://via.placeholder.com/800x600?text=Temperature+Records",
-        publishedAt: new Date(Date.now() - 86400000).toISOString(),
-        source: { name: "Climate Report" }
-      },
-      {
-        title: "Hurricane Season Predictions Updated",
-        description: "Meteorologists release updated forecasts for the upcoming hurricane season.",
-        url: "https://example.com/hurricane-season",
-        urlToImage: "https://via.placeholder.com/800x600?text=Hurricane+Season",
-        publishedAt: new Date(Date.now() - 172800000).toISOString(),
-        source: { name: "Storm Watch" }
-      },
-      {
-        title: "New Weather Satellite Launched",
-        description: "Next-generation weather satellite improves forecast accuracy worldwide.",
-        url: "https://example.com/weather-satellite",
-        urlToImage: "https://via.placeholder.com/800x600?text=Weather+Satellite",
-        publishedAt: new Date(Date.now() - 259200000).toISOString(),
-        source: { name: "Space News" }
-      },
-      {
-        title: "Air Quality Improves in Major Cities",
-        description: "Air pollution levels decrease in major urban areas thanks to new regulations.",
-        url: "https://example.com/air-quality",
-        urlToImage: "https://via.placeholder.com/800x600?text=Air+Quality",
-        publishedAt: new Date(Date.now() - 345600000).toISOString(),
-        source: { name: "Environmental Report" }
-      },
-      {
-        title: "Drought Conditions Worsen in Regions",
-        description: "Extended drought affects agriculture and water supply in several regions.",
-        url: "https://example.com/drought-conditions",
-        urlToImage: "https://via.placeholder.com/800x600?text=Drought+Conditions",
-        publishedAt: new Date(Date.now() - 432000000).toISOString(),
-        source: { name: "Weather Alert" }
-      }
-    ];
+  // If all proxies failed, throw so caller can fallback to local sample
+  throw new Error("All RSS proxies failed");
+}
 
-    // Фільтруємо по запиту якщо він є
-    let filtered = mockNews;
-    if (q && q.trim()) {
-      const lower = q.toLowerCase();
-      filtered = mockNews.filter(article => 
-        article.title.toLowerCase().includes(lower) || 
-        article.description.toLowerCase().includes(lower)
-      );
+export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
+>>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
+  const key = getNewsApiKey();
+  
+  // NEWS: try NewsAPI with key, otherwise RSS feeds via proxies, otherwise local sample
+  export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
+    const key = getNewsApiKey();
+
+    if (key) {
+      try {
+        const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
+        const params = new URLSearchParams();
+        if (q) params.append("q", q);
+        if (!q && country) params.append("country", country);
+        if (language) params.append("language", language);
+        params.append("page", String(page));
+        params.append("pageSize", String(pageSize));
+
+        const url = `${base}?${params.toString()}`;
+        const res = await fetch(url, { headers: { "X-Api-Key": key } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.articles) return data;
+        }
+      } catch (err) {
+        console.warn("NewsAPI error:", err);
+      }
     }
 
-    // Сортуємо за датою (нові першими)
-    filtered.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    // RSS fallback
+    try {
+      const feeds = [
+        "https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml",
+        "https://feeds.reuters.com/reuters/environment",
+        "https://www.theguardian.com/environment/rss",
+      ];
+
+      const feedItems = [];
+      for (const feedUrl of feeds) {
+        try {
+          const items = await fetchRssFeed(feedUrl);
+          feedItems.push(...items);
+        } catch (err) {
+          console.warn("RSS fallback feed failed:", feedUrl, err);
+        }
+      }
+
+      if (!feedItems.length) return sampleNews;
+
+      const filtered = feedItems.filter((item) => {
+        if (!q) return true;
+        const lower = q.toLowerCase();
+        return [item.title, item.description, item.source?.name].some((value) =>
+          String(value || "").toLowerCase().includes(lower)
+        );
+      });
+
+      const unique = Array.from(new Map(filtered.map((item) => [item.url, item])).values());
+      const sorted = unique.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      const start = (page - 1) * pageSize;
+      const paged = sorted.slice(start, start + pageSize);
+
+      return { articles: paged, totalResults: filtered.length };
+    } catch (err) {
+      console.error("News fallback error:", err);
+      return sampleNews;
+    }
+  }
+>>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
 
     // Пагінація
     const start = (page - 1) * pageSize;
@@ -180,7 +210,13 @@ export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "",
 
     return { articles: paged, totalResults: filtered.length };
   } catch (err) {
+<<<<<<< HEAD
     console.error("Fallback news error:", err);
     return { articles: [] };
+=======
+    console.error("News fallback error:", err);
+    // final fallback: sample local news
+    return sampleNews;
+>>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
   }
 }
