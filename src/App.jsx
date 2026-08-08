@@ -583,6 +583,7 @@ export default function App() {
               ))}
             </section>
           )}
+          
 
           {/* SINGLE CITY VIEW */}
           {weather && (
