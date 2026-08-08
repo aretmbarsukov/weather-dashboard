@@ -1,160 +1,98 @@
-// api.js — keys come from localStorage first, then fallback to build env
-function getRuntimeApiKey(storageKey, envValue) {
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem(storageKey);
-    if (stored?.trim()) return stored.trim();
-  }
-  return envValue || "";
-}
+// ===============================
+// API KEYS
+// ===============================
+const OPENWEATHER_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
 
-export function getOpenWeatherKey() {
-  return getRuntimeApiKey("VITE_OPENWEATHER_KEY", import.meta.env.VITE_OPENWEATHER_KEY);
-}
-
-export function getNewsApiKey() {
-  return getRuntimeApiKey("VITE_NEWSAPI_KEY", import.meta.env.VITE_NEWSAPI_KEY);
-}
-
-// local sample news for reliable fallback
-import sampleNews from "./data/news-sample.json";
-
-// local fallback sample (imported dynamically when needed)
+// ===============================
 // GEO SEARCH
+// ===============================
 export async function geoSearch(city) {
-  const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${getOpenWeatherKey()}`;
-  const res = await fetch(url);
+  const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(
+    city
+  )}&limit=1&appid=${OPENWEATHER_KEY}`;
 
-  if (!res.ok) {
-    console.error("geoSearch error:", res.status);
-    throw new Error("Failed to load city");
-  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to load city");
 
   const data = await res.json();
   if (!data.length) throw new Error("City not found");
+
   return data[0];
 }
 
-// WEATHER
+// ===============================
+// CURRENT WEATHER
+// ===============================
 export async function getWeather(lat, lon) {
-  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${getOpenWeatherKey()}&units=metric`;
-  const res = await fetch(url);
+  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
 
-  if (!res.ok) {
-    console.error("getWeather error:", res.status);
-    throw new Error("Failed to load weather");
-  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to load weather");
 
   return await res.json();
 }
 
-// FORECAST (єдина правильна версія)
+// ===============================
+// FORECAST
+// ===============================
 export async function getForecast(lat, lon) {
-  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${getOpenWeatherKey()}&units=metric`;
-  const res = await fetch(url);
+  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_KEY}&units=metric`;
 
-  if (!res.ok) {
-    console.error("Forecast error:", res.status);
-    return { list: [] }; // не ламаємо UI
-  }
+  const res = await fetch(url);
+  if (!res.ok) return { list: [] };
 
   return await res.json();
 }
 
-// CITY PHOTO (use thematic LoremFlickr city images with landmark and skyline tags)
-const CITY_IMAGE_TAGS = {
-  kyiv: "kyiv,landmark,architecture,skyline",
-  prague: "prague,landmark,architecture,castle",
-  warsaw: "warsaw,landmark,architecture,skyline",
-  berlin: "berlin,landmark,architecture,skyline",
-  madrid: "madrid,landmark,architecture,skyline",
-  vienna: "vienna,landmark,architecture,skyline",
-};
-
+// ===============================
+// CITY PHOTO (LoremFlickr)
+// ===============================
 export function getCityPhoto(city) {
-  const cityName = String(city || "city").trim().toLowerCase();
-  const normalized = cityName.replace(/[^a-z0-9\s-]/gi, "").replace(/\s+/g, "-");
-  const tags = CITY_IMAGE_TAGS[normalized] || `${normalized || "city"},landmark,skyline,architecture`;
-  const hash = tags.split("").reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 100000, 1);
-  const encodedTags = encodeURIComponent(tags);
-  return `https://loremflickr.com/800/600/${encodedTags}?lock=${hash}`;
+  const normalized = String(city || "city")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/gi, "")
+    .replace(/\s+/g, "-");
+
+  const tags = `${normalized},landmark,skyline,architecture`;
+
+  const hash = tags
+    .split("")
+    .reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 100000, 1);
+
+  return `https://loremflickr.com/800/600/${encodeURIComponent(tags)}?lock=${hash}`;
 }
 
-  // NEWS: implementation — NewsAPI (if key) -> RSS feeds via proxies -> local sample fallback
-  function parseRssItem(item) {
-    const title = item.querySelector("title")?.textContent || "No title";
-    const link = item.querySelector("link")?.textContent || "#";
-    const description = item.querySelector("description")?.textContent || "";
-    const pubDate = item.querySelector("pubDate")?.textContent || new Date().toISOString();
-    const enclosure = item.querySelector("enclosure");
-    const image = enclosure?.getAttribute("url") || null;
-    const sourceName = item.ownerDocument?.querySelector("channel > title")?.textContent || "News";
+// ===============================
+// NEWS — Ukrainian feeds via Jina Reader
+// ===============================
+export async function fetchNewsUA() {
+  const feeds = [
+    "https://r.jina.ai/https://www.pravda.com.ua/rss/",
+    "https://r.jina.ai/https://www.unian.ua/rss/publications",
+    "https://r.jina.ai/https://www.ukrinform.ua/rss",
+  ];
 
-    return {
-      title,
-      url: link,
-      description,
-      publishedAt: pubDate,
-      urlToImage: image,
-      source: { name: sourceName },
-    };
-  }
+  const all = [];
 
-  async function fetchRssFeed(url) {
-    const proxies = [
-      "https://api.allorigins.win/raw?url=",
-      "https://r.jina.ai/http://",
-      "https://thingproxy.freeboard.io/fetch/",
-    ];
-
-    for (const p of proxies) {
-      try {
-        const proxyUrl = p + encodeURIComponent(url);
-        const res = await fetch(proxyUrl);
-        if (!res.ok) {
-          console.warn("proxy failed", p, res.status);
-          continue;
-        }
-
-        const text = await res.text();
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(text, "application/xml");
-        const items = Array.from(xml.querySelectorAll("item") || []).map(parseRssItem);
-        if (items && items.length) return items;
-      } catch (err) {
-        console.warn("proxy error", p, err);
-        continue;
-      }
+  for (const url of feeds) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn("fetchNewsUA feed failed:", url, res.status);
+      continue;
     }
 
-    throw new Error("All RSS proxies failed");
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    const items = [...xml.querySelectorAll("item")].map((item) => ({
+      title: item.querySelector("title")?.textContent || "",
+      description: item.querySelector("description")?.textContent || "",
+      link: item.querySelector("link")?.textContent || "",
+      date: item.querySelector("pubDate")?.textContent || "",
+    }));
+
+    all.push(...items);
   }
 
-  export async function fetchNews({ q = "", page = 1, pageSize = 12 } = {}) {
-    const API_KEY = "2ecce457498231efb544e4d68fe5ceac";
-
-    const params = new URLSearchParams({
-      apikey: API_KEY,
-      lang: "en",
-      country: "us",
-      max: pageSize,
-    });
-
-    if (q.trim()) params.append("q", q.trim());
-
-    const url = `https://gnews.io/api/v4/top-headlines?${params.toString()}`;
-
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("GNews failed");
-
-      const data = await res.json();
-
-      return {
-        articles: data.articles || [],
-        totalResults: data.totalArticles || data.articles?.length || 0,
-      };
-    } catch (err) {
-      console.error("GNews error:", err);
-      return { articles: [], totalResults: 0 };
-    }
-  }
+  return all;
+}
