@@ -129,66 +129,32 @@ export function getCityPhoto(city) {
     throw new Error("All RSS proxies failed");
   }
 
-  export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
-    const key = getNewsApiKey();
+  export async function fetchNews({ q = "", page = 1, pageSize = 12 } = {}) {
+    const API_KEY = "2ecce457498231efb544e4d68fe5ceac";
 
-    if (key) {
-      try {
-        const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
-        const params = new URLSearchParams();
-        if (q) params.append("q", q);
-        if (!q && country) params.append("country", country);
-        if (language) params.append("language", language);
-        params.append("page", String(page));
-        params.append("pageSize", String(pageSize));
+    const params = new URLSearchParams({
+      apikey: API_KEY,
+      lang: "en",
+      country: "us",
+      max: pageSize,
+    });
 
-        const url = `${base}?${params.toString()}`;
-        const res = await fetch(url, { headers: { "X-Api-Key": key } });
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.articles) return data;
-        }
-      } catch (err) {
-        console.warn("NewsAPI error:", err);
-      }
-    }
+    if (q.trim()) params.append("q", q.trim());
 
-    // RSS fallback
+    const url = `https://gnews.io/api/v4/top-headlines?${params.toString()}`;
+
     try {
-      const feeds = [
-        "https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml",
-        "https://feeds.reuters.com/reuters/environment",
-        "https://www.theguardian.com/environment/rss",
-      ];
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("GNews failed");
 
-      const feedItems = [];
-      for (const feedUrl of feeds) {
-        try {
-          const items = await fetchRssFeed(feedUrl);
-          feedItems.push(...items);
-        } catch (err) {
-          console.warn("RSS fallback feed failed:", feedUrl, err);
-        }
-      }
+      const data = await res.json();
 
-      if (!feedItems.length) return sampleNews;
-
-      const filtered = feedItems.filter((item) => {
-        if (!q) return true;
-        const lower = q.toLowerCase();
-        return [item.title, item.description, item.source?.name].some((value) =>
-          String(value || "").toLowerCase().includes(lower)
-        );
-      });
-
-      const unique = Array.from(new Map(filtered.map((item) => [item.url, item])).values());
-      const sorted = unique.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      const start = (page - 1) * pageSize;
-      const paged = sorted.slice(start, start + pageSize);
-
-      return { articles: paged, totalResults: filtered.length };
+      return {
+        articles: data.articles || [],
+        totalResults: data.totalArticles || data.articles?.length || 0,
+      };
     } catch (err) {
-      console.error("News fallback error:", err);
-      return sampleNews;
+      console.error("GNews error:", err);
+      return { articles: [], totalResults: 0 };
     }
   }
