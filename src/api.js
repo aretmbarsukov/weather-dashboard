@@ -15,12 +15,6 @@ export function getNewsApiKey() {
   return getRuntimeApiKey("VITE_NEWSAPI_KEY", import.meta.env.VITE_NEWSAPI_KEY);
 }
 
-export function ensureLocalApiKey(storageKey, value) {
-  if (typeof window !== "undefined" && value?.trim()) {
-    window.localStorage.setItem(storageKey, value.trim());
-  }
-}
-
 // GEO SEARCH
 export async function geoSearch(city) {
   const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${getOpenWeatherKey()}`;
@@ -82,29 +76,100 @@ export function getCityPhoto(city) {
 }
 
 // NEWS
-export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
-  const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
+function parseRssItem(item) {
+  const title = item.querySelector("title")?.textContent || "No title";
+  const link = item.querySelector("link")?.textContent || "#";
+  const description = item.querySelector("description")?.textContent || "";
+  const pubDate = item.querySelector("pubDate")?.textContent || new Date().toISOString();
+  const enclosure = item.querySelector("enclosure");
+  const image = enclosure?.getAttribute("url") || null;
+  const sourceName = item.ownerDocument?.querySelector("channel > title")?.textContent || "News";
 
-  const params = new URLSearchParams();
-  if (q) params.append("q", q);
-  if (!q && country) params.append("country", country);
-  if (language) params.append("language", language);
-  params.append("page", String(page));
-  params.append("pageSize", String(pageSize));
+  return {
+    title,
+    url: link,
+    description,
+    publishedAt: pubDate,
+    urlToImage: image,
+    source: { name: sourceName },
+  };
+}
 
-  const url = `${base}?${params.toString()}`;
-
-  const res = await fetch(url, {
-    headers: {
-      "X-Api-Key": getNewsApiKey()
-    }
-  });
-
+async function fetchRssFeed(url) {
+  const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxy);
   if (!res.ok) {
-    const text = await res.text();
-    console.error("NewsAPI error:", res.status, text);
-    return { articles: [] }; // не ламаємо сайт
+    throw new Error(`RSS fetch failed: ${res.status}`);
   }
 
-  return await res.json();
+  const text = await res.text();
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(text, "application/xml");
+  const items = Array.from(xml.querySelectorAll("item") || []).map(parseRssItem);
+  return items;
+}
+
+export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
+  const key = getNewsApiKey();
+  if (key) {
+    const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
+
+    const params = new URLSearchParams();
+    if (q) params.append("q", q);
+    if (!q && country) params.append("country", country);
+    if (language) params.append("language", language);
+    params.append("page", String(page));
+    params.append("pageSize", String(pageSize));
+
+    const url = `${base}?${params.toString()}`;
+
+    const res = await fetch(url, {
+      headers: {
+        "X-Api-Key": key,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("NewsAPI error:", res.status, text);
+      return { articles: [] };
+    }
+
+    return await res.json();
+  }
+
+  try {
+    const feeds = [
+      "https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml",
+      "https://feeds.reuters.com/reuters/environment",
+      "https://www.theguardian.com/environment/rss",
+    ];
+    const feedItems = [];
+
+    for (const feedUrl of feeds) {
+      try {
+        const items = await fetchRssFeed(feedUrl);
+        feedItems.push(...items);
+      } catch (err) {
+        console.warn("RSS fallback feed failed:", feedUrl, err);
+      }
+    }
+
+    const filtered = feedItems.filter((item) => {
+      if (!q) return true;
+      const lower = q.toLowerCase();
+      return [item.title, item.description, item.source?.name].some((value) =>
+        String(value || "").toLowerCase().includes(lower)
+      );
+    });
+
+    const unique = Array.from(new Map(filtered.map((item) => [item.url, item])).values());
+    const sorted = unique.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+    return { articles: paged };
+  } catch (err) {
+    console.error("News fallback error:", err);
+    return { articles: [] };
+  }
 }
