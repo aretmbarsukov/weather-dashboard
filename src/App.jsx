@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
+// import { API_KEY, NEWS_API_KEY } from "./config";
 import {
   geoSearch,
   getWeather,
   getForecast,
   getCityPhoto,
-  fetchNews,
+  fetchNews
 } from "./api";
+
+
 
 /* SVG ICONS */
 const SunIcon = () => (
@@ -61,6 +64,16 @@ function sanitizeCityInput(raw) {
   return s;
 }
 
+const DEFAULT_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+
+function getWeatherIconUrl(icon) {
+  return icon ? `https://openweathermap.org/img/wn/${icon}@2x.png` : DEFAULT_IMAGE;
+}
+
+function handleImageError(e) {
+  e.currentTarget.src = DEFAULT_IMAGE;
+}
+
 export default function App() {
   const [page, setPage] = useState("home");
   const [city, setCity] = useState("");
@@ -70,7 +83,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // citiesData: [{ name, lat, lon, temp, desc, photo, loading, error }]
+  // citiesData: [{ name, lat, lon, temp, desc, icon, photo, loading, error }]
   const [citiesData, setCitiesData] = useState([]);
   const citiesCacheRef = useRef({}); // cache by city name
 
@@ -121,6 +134,7 @@ export default function App() {
         temp: null,
         desc: "",
         photo: null,
+        icon: null,
         loading: true,
         error: null,
       }));
@@ -149,6 +163,7 @@ export default function App() {
             lon: loc.lon,
             temp: typeof w?.main?.temp === "number" ? Math.round(w.main.temp) : null,
             desc: w?.weather?.[0]?.description || "",
+            icon: w?.weather?.[0]?.icon || null,
             photo: p,
             loading: false,
             error: null,
@@ -475,7 +490,7 @@ export default function App() {
               <article key={i} className="news-card">
                 <a href={a.url} target="_blank" rel="noreferrer">
                   <div className="news-thumb">
-                    <img src={a.urlToImage || "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg"} alt={a.title} />
+                    <img src={a.urlToImage || DEFAULT_IMAGE} alt={a.title} onError={handleImageError} />
                   </div>
                   <div className="news-body">
                     <h3>{a.title}</h3>
@@ -549,9 +564,10 @@ export default function App() {
                 <div key={i} className="card">
                   <div className="photo-wrap">
                     <img
-                      src={c.photo || "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg"}
+                      src={c.photo || DEFAULT_IMAGE}
                       alt={c.name}
                       className="city-photo"
+                      onError={handleImageError}
                     />
                   </div>
 
@@ -573,10 +589,17 @@ export default function App() {
             <section className="weather-cards container single-view">
               <div className="card single-card">
                 <div className="photo-wrap">
-                  <img src={photo} alt={weather.name} className="city-photo" />
+                  <img src={photo || DEFAULT_IMAGE} alt={weather.name} className="city-photo" onError={handleImageError} />
                 </div>
 
-                <h3>{weather.name}</h3>
+                <div className="city-header">
+                  <h3>{weather.name}</h3>
+                  {weather.weather?.[0]?.icon && (
+                    <div className="weather-icon">
+                      <img src={getWeatherIconUrl(weather.weather[0].icon)} alt={weather.weather[0].description || "weather icon"} onError={handleImageError} />
+                    </div>
+                  )}
+                </div>
                 <SunIcon />
                 <p className="desc">{weather.weather[0].description}</p>
                 <span className="temp">{Math.round(weather.main.temp)}°C</span>
@@ -628,7 +651,7 @@ export default function App() {
                 ) : modalError ? (
                   <div className="modal-error">{modalError}</div>
                 ) : (
-                  <img src={modalPhoto || "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg"} alt={modalCity} className="modal-photo" />
+                  <img src={modalPhoto || DEFAULT_IMAGE} alt={modalCity} className="modal-photo" onError={handleImageError} />
                 )}
               </div>
 

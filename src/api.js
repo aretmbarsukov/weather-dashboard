@@ -1,10 +1,17 @@
-// api.js
-import { API_KEY, NEWS_API_KEY } from "./config";
+// api.js — варіант B (ключі з .env)
+const API_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
+const NEWS_API_KEY = import.meta.env.VITE_NEWSAPI_KEY;
 
 // GEO SEARCH
 export async function geoSearch(city) {
   const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`;
   const res = await fetch(url);
+
+  if (!res.ok) {
+    console.error("geoSearch error:", res.status);
+    throw new Error("Failed to load city");
+  }
+
   const data = await res.json();
   if (!data.length) throw new Error("City not found");
   return data[0];
@@ -14,32 +21,51 @@ export async function geoSearch(city) {
 export async function getWeather(lat, lon) {
   const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
   const res = await fetch(url);
+
+  if (!res.ok) {
+    console.error("getWeather error:", res.status);
+    throw new Error("Failed to load weather");
+  }
+
   return await res.json();
 }
 
-// FORECAST
+// FORECAST (єдина правильна версія)
 export async function getForecast(lat, lon) {
   const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
   const res = await fetch(url);
+
+  if (!res.ok) {
+    console.error("Forecast error:", res.status);
+    return { list: [] }; // не ламаємо UI
+  }
+
   return await res.json();
 }
 
-// WIKIPEDIA CITY PHOTO
-export async function getCityPhoto(city) {
-  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.thumbnail?.source) return data.thumbnail.source;
-  return "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+// CITY PHOTO (use thematic LoremFlickr city images with landmark and skyline tags)
+const CITY_IMAGE_TAGS = {
+  kyiv: "kyiv,landmark,architecture,skyline",
+  prague: "prague,landmark,architecture,castle",
+  warsaw: "warsaw,landmark,architecture,skyline",
+  berlin: "berlin,landmark,architecture,skyline",
+  madrid: "madrid,landmark,architecture,skyline",
+  vienna: "vienna,landmark,architecture,skyline",
+};
+
+export function getCityPhoto(city) {
+  const cityName = String(city || "city").trim().toLowerCase();
+  const normalized = cityName.replace(/[^a-z0-9\s-]/gi, "").replace(/\s+/g, "-");
+  const tags = CITY_IMAGE_TAGS[normalized] || `${normalized || "city"},landmark,skyline,architecture`;
+  const hash = tags.split("").reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 100000, 1);
+  const encodedTags = encodeURIComponent(tags);
+  return `https://loremflickr.com/800/600/${encodedTags}?lock=${hash}`;
 }
 
-/**
- * fetchNews
- * - If q provided -> uses everything endpoint
- * - If q empty -> uses top-headlines with country (default "es")
- */
+// NEWS
 export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
   const base = q ? "https://newsapi.org/v2/everything" : "https://newsapi.org/v2/top-headlines";
+
   const params = new URLSearchParams();
   if (q) params.append("q", q);
   if (!q && country) params.append("country", country);
@@ -57,9 +83,9 @@ export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`News API error: ${res.status} ${text}`);
+    console.error("NewsAPI error:", res.status, text);
+    return { articles: [] }; // не ламаємо сайт
   }
 
-  const data = await res.json();
-  return data;
+  return await res.json();
 }
