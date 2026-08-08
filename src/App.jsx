@@ -82,6 +82,10 @@ export default function App() {
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openWeatherKeyInput, setOpenWeatherKeyInput] = useState("");
+  const [newsKeyInput, setNewsKeyInput] = useState("");
+  const [keysLoaded, setKeysLoaded] = useState(false);
+  const [keysMissing, setKeysMissing] = useState(false);
 
   // citiesData: [{ name, lat, lon, temp, desc, icon, photo, loading, error }]
   const [citiesData, setCitiesData] = useState([]);
@@ -120,6 +124,17 @@ export default function App() {
     day: "numeric",
     weekday: "long",
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const ow = window.localStorage.getItem("VITE_OPENWEATHER_KEY") || "";
+      const nw = window.localStorage.getItem("VITE_NEWSAPI_KEY") || "";
+      setOpenWeatherKeyInput(ow);
+      setNewsKeyInput(nw);
+      setKeysLoaded(true);
+      setKeysMissing(!ow.trim() || !nw.trim());
+    }
+  }, []);
 
   /* Load real weather for default cities on mount (fixed: no duplicates) */
   useEffect(() => {
@@ -213,6 +228,29 @@ export default function App() {
     setCity("");
     setError("");
     setPage("home");
+  }
+
+  function saveApiKeys() {
+    if (typeof window === "undefined") return;
+    if (openWeatherKeyInput.trim()) {
+      window.localStorage.setItem("VITE_OPENWEATHER_KEY", openWeatherKeyInput.trim());
+    }
+    if (newsKeyInput.trim()) {
+      window.localStorage.setItem("VITE_NEWSAPI_KEY", newsKeyInput.trim());
+    }
+    setKeysMissing(!openWeatherKeyInput.trim() || !newsKeyInput.trim());
+    setError("");
+    window.location.reload();
+  }
+
+  function clearApiKeys() {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem("VITE_OPENWEATHER_KEY");
+    window.localStorage.removeItem("VITE_NEWSAPI_KEY");
+    setOpenWeatherKeyInput("");
+    setNewsKeyInput("");
+    setKeysMissing(true);
+    setError("");
   }
 
   /* SEARCH */
@@ -538,6 +576,36 @@ export default function App() {
               <div className="search-hint" role="status" aria-live="polite">
                 Tip: press Enter to search or click the Search button
               </div>
+
+              {keysLoaded && keysMissing && (
+                <div className="api-key-box">
+                  <p>Enter your API keys to use the weather site on GitHub Pages. Keys are stored only in browser localStorage.</p>
+                  <div className="api-inputs">
+                    <label>
+                      OpenWeather key
+                      <input
+                        type="text"
+                        placeholder="OpenWeather API key"
+                        value={openWeatherKeyInput}
+                        onChange={(e) => setOpenWeatherKeyInput(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      NewsAPI key
+                      <input
+                        type="text"
+                        placeholder="News API key"
+                        value={newsKeyInput}
+                        onChange={(e) => setNewsKeyInput(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="api-key-actions">
+                    <button onClick={saveApiKeys}>Save keys</button>
+                    <button className="clear-keys" onClick={clearApiKeys}>Clear keys</button>
+                  </div>
+                </div>
+              )}
 
               {error && <p className="error">{error}</p>}
             </div>

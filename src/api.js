@@ -1,10 +1,29 @@
-// api.js — варіант B (ключі з .env)
-const API_KEY = import.meta.env.VITE_OPENWEATHER_KEY;
-const NEWS_API_KEY = import.meta.env.VITE_NEWSAPI_KEY;
+// api.js — keys come from localStorage first, then fallback to build env
+function getRuntimeApiKey(storageKey, envValue) {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored?.trim()) return stored.trim();
+  }
+  return envValue || "";
+}
+
+export function getOpenWeatherKey() {
+  return getRuntimeApiKey("VITE_OPENWEATHER_KEY", import.meta.env.VITE_OPENWEATHER_KEY);
+}
+
+export function getNewsApiKey() {
+  return getRuntimeApiKey("VITE_NEWSAPI_KEY", import.meta.env.VITE_NEWSAPI_KEY);
+}
+
+export function ensureLocalApiKey(storageKey, value) {
+  if (typeof window !== "undefined" && value?.trim()) {
+    window.localStorage.setItem(storageKey, value.trim());
+  }
+}
 
 // GEO SEARCH
 export async function geoSearch(city) {
-  const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`;
+  const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${getOpenWeatherKey()}`;
   const res = await fetch(url);
 
   if (!res.ok) {
@@ -19,7 +38,7 @@ export async function geoSearch(city) {
 
 // WEATHER
 export async function getWeather(lat, lon) {
-  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${getOpenWeatherKey()}&units=metric`;
   const res = await fetch(url);
 
   if (!res.ok) {
@@ -32,7 +51,7 @@ export async function getWeather(lat, lon) {
 
 // FORECAST (єдина правильна версія)
 export async function getForecast(lat, lon) {
-  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${getOpenWeatherKey()}&units=metric`;
   const res = await fetch(url);
 
   if (!res.ok) {
@@ -77,7 +96,7 @@ export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es
 
   const res = await fetch(url, {
     headers: {
-      "X-Api-Key": NEWS_API_KEY
+      "X-Api-Key": getNewsApiKey()
     }
   });
 
