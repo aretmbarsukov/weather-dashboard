@@ -473,6 +473,21 @@ footer{
   border:1px solid #eee;
 }
 
+/* make pagination buttons more visible */
+.news-pagination .arrow-btn {
+  background: linear-gradient(90deg, var(--accent), #3a8cff);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 18px rgba(0,123,255,0.18);
+  font-weight:700;
+}
+
+.news-pagination .arrow-btn:disabled {
+  background: #ddd;
+  color: #777;
+  box-shadow: none;
+}
+
 /* ensure smooth scroll behavior for the whole document */
 html {
   scroll-behavior: smooth;

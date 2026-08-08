@@ -79,66 +79,56 @@ export function getCityPhoto(city) {
   return `https://loremflickr.com/800/600/${encodedTags}?lock=${hash}`;
 }
 
-<<<<<<< HEAD
-// NEWS - виправлена версія з кращим fallback
-export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "", language = "" } = {}) {
-=======
-// NEWS
-function parseRssItem(item) {
-  const title = item.querySelector("title")?.textContent || "No title";
-  const link = item.querySelector("link")?.textContent || "#";
-  const description = item.querySelector("description")?.textContent || "";
-  const pubDate = item.querySelector("pubDate")?.textContent || new Date().toISOString();
-  const enclosure = item.querySelector("enclosure");
-  const image = enclosure?.getAttribute("url") || null;
-  const sourceName = item.ownerDocument?.querySelector("channel > title")?.textContent || "News";
+  // NEWS: implementation — NewsAPI (if key) -> RSS feeds via proxies -> local sample fallback
+  function parseRssItem(item) {
+    const title = item.querySelector("title")?.textContent || "No title";
+    const link = item.querySelector("link")?.textContent || "#";
+    const description = item.querySelector("description")?.textContent || "";
+    const pubDate = item.querySelector("pubDate")?.textContent || new Date().toISOString();
+    const enclosure = item.querySelector("enclosure");
+    const image = enclosure?.getAttribute("url") || null;
+    const sourceName = item.ownerDocument?.querySelector("channel > title")?.textContent || "News";
 
-  return {
-    title,
-    url: link,
-    description,
-    publishedAt: pubDate,
-    urlToImage: image,
-    source: { name: sourceName },
-  };
-}
-
-async function fetchRssFeed(url) {
-  const proxies = [
-    "https://api.allorigins.win/raw?url=",
-    "https://r.jina.ai/http://",
-    "https://thingproxy.freeboard.io/fetch/",
-  ];
-
-  for (const p of proxies) {
-    try {
-      const proxyUrl = p + encodeURIComponent(url);
-      const res = await fetch(proxyUrl);
-      if (!res.ok) {
-        console.warn("proxy failed", p, res.status);
-        continue;
-      }
-
-      const text = await res.text();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(text, "application/xml");
-      const items = Array.from(xml.querySelectorAll("item") || []).map(parseRssItem);
-      if (items && items.length) return items;
-    } catch (err) {
-      console.warn("proxy error", p, err);
-      continue;
-    }
+    return {
+      title,
+      url: link,
+      description,
+      publishedAt: pubDate,
+      urlToImage: image,
+      source: { name: sourceName },
+    };
   }
 
-  // If all proxies failed, throw so caller can fallback to local sample
-  throw new Error("All RSS proxies failed");
-}
+  async function fetchRssFeed(url) {
+    const proxies = [
+      "https://api.allorigins.win/raw?url=",
+      "https://r.jina.ai/http://",
+      "https://thingproxy.freeboard.io/fetch/",
+    ];
 
-export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
->>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
-  const key = getNewsApiKey();
-  
-  // NEWS: try NewsAPI with key, otherwise RSS feeds via proxies, otherwise local sample
+    for (const p of proxies) {
+      try {
+        const proxyUrl = p + encodeURIComponent(url);
+        const res = await fetch(proxyUrl);
+        if (!res.ok) {
+          console.warn("proxy failed", p, res.status);
+          continue;
+        }
+
+        const text = await res.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "application/xml");
+        const items = Array.from(xml.querySelectorAll("item") || []).map(parseRssItem);
+        if (items && items.length) return items;
+      } catch (err) {
+        console.warn("proxy error", p, err);
+        continue;
+      }
+    }
+
+    throw new Error("All RSS proxies failed");
+  }
+
   export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es", language = "" } = {}) {
     const key = getNewsApiKey();
 
@@ -202,21 +192,3 @@ export async function fetchNews({ q = "", page = 1, pageSize = 12, country = "es
       return sampleNews;
     }
   }
->>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
-
-    // Пагінація
-    const start = (page - 1) * pageSize;
-    const paged = filtered.slice(start, start + pageSize);
-
-    return { articles: paged, totalResults: filtered.length };
-  } catch (err) {
-<<<<<<< HEAD
-    console.error("Fallback news error:", err);
-    return { articles: [] };
-=======
-    console.error("News fallback error:", err);
-    // final fallback: sample local news
-    return sampleNews;
->>>>>>> 7091ee3 (fix(news): add RSS proxy fallback and local news sample)
-  }
-}
