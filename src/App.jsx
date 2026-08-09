@@ -106,6 +106,63 @@ export default function App() {
     const [error, setError] = useState("");
 
     const [menuOpen, setMenuOpen] = useState(false);
+    const [darkMode, setDarkMode] = useState(() => {
+        try {
+            return localStorage.getItem("weatherTheme") === "dark";
+        } catch {
+            return false;
+        }
+    });
+
+    const [authModalOpen, setAuthModalOpen] = useState(false);
+    const [profileModalOpen, setProfileModalOpen] = useState(false);
+    const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [user, setUser] = useState(null);
+    const [authInput, setAuthInput] = useState({
+        name: "",
+        email: "",
+        password: ""
+    });
+    const [authError, setAuthError] = useState("");
+    const [authSuccess, setAuthSuccess] = useState("");
+    const [profileInput, setProfileInput] = useState({
+        name: "",
+        email: "",
+        avatar: "",
+        password: ""
+    });
+    const [profileMessage, setProfileMessage] = useState("");
+    const [profileError, setProfileError] = useState("");
+    const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem("weatherUser");
+
+        if (!storedUser) return;
+
+        try {
+            const parsed = JSON.parse(storedUser);
+
+            if (parsed && parsed.name && parsed.email) {
+                setUser(parsed);
+            }
+        } catch (err) {
+            console.warn("Failed to parse stored user", err);
+            localStorage.removeItem("weatherUser");
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                "weatherTheme",
+                darkMode ? "dark" : "light"
+            );
+        } catch {
+            // ignore localStorage errors
+        }
+    }, [darkMode]);
 
     /* DEFAULT CITIES */
 
@@ -268,6 +325,240 @@ export default function App() {
     function navigateTo(target) {
         setPage(target);
         setMenuOpen(false);
+    }
+
+    function saveUser(userData) {
+        const safeUser = {
+            name: userData.name,
+            email: userData.email,
+            avatar:
+                userData.avatar ||
+                `https://api.dicebear.com/6.x/identicon/svg?seed=${encodeURIComponent(
+                    userData.name
+                )}`,
+            password: userData.password
+        };
+
+        localStorage.setItem(
+            "weatherUser",
+            JSON.stringify(safeUser)
+        );
+
+        setUser({
+            name: safeUser.name,
+            email: safeUser.email,
+            avatar: safeUser.avatar
+        });
+    }
+
+    function openAuthModal() {
+        setAuthModalOpen(true);
+        setAuthError("");
+        setAuthSuccess("");
+        setShowPassword(false);
+        setAuthInput({ name: "", email: "", password: "" });
+    }
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                "weatherTheme",
+                darkMode ? "dark" : "light"
+            );
+        } catch {
+            // ignore write errors
+        }
+    }, [darkMode]);
+
+    function closeAuthModal() {
+        setAuthModalOpen(false);
+        setAuthError("");
+        setAuthSuccess("");
+        setShowPassword(false);
+        setAuthInput({ name: "", email: "", password: "" });
+    }
+
+    function openProfileModal() {
+        if (!user) return;
+
+        setProfileInput({
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar || "",
+            password: ""
+        });
+        setProfileMessage("");
+        setProfileError("");
+        setShowPassword(false);
+        setAvatarPickerOpen(false);
+        setProfileModalOpen(true);
+    }
+
+    function closeProfileModal() {
+        setProfileModalOpen(false);
+        setProfileMessage("");
+        setProfileError("");
+        setShowPassword(false);
+        setProfileInput((prev) => ({ ...prev, password: "" }));
+    }
+
+    function handleRegister() {
+        setAuthError("");
+        setAuthSuccess("");
+
+        const name = authInput.name.trim();
+        const email = authInput.email.trim();
+        const password = authInput.password;
+
+        if (!name || !email || !password) {
+            setAuthError("Всі поля обов'язкові.");
+            return;
+        }
+
+        if (password.length < 6) {
+            setAuthError(
+                "Пароль має містити щонайменше 6 символів."
+            );
+            return;
+        }
+
+        saveUser({ name, email, password });
+        setAuthSuccess(
+            "Реєстрація успішна. Ви тепер увійшли."
+        );
+        setAuthModalOpen(false);
+    }
+
+    function handleLogout() {
+        localStorage.removeItem("weatherUser");
+        setUser(null);
+        setAuthError("");
+        setAuthSuccess("");
+        setAuthModalOpen(false);
+        setProfileModalOpen(false);
+        setPage("home");
+    }
+
+    const avatarOptions = [
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-01",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-02",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-03",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-04",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-05",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-06",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-07",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-08",
+        "https://api.dicebear.com/6.x/identicon/svg?seed=avatar-09"
+    ];
+
+    function handleAuthChange(field, value) {
+        setAuthInput((prev) => ({
+            ...prev,
+            [field]: value
+        }));
+    }
+
+    function handleProfileChange(field, value) {
+        setProfileInput((prev) => ({
+            ...prev,
+            [field]: value
+        }));
+    }
+
+    function handleAvatarFileChange(e) {
+        setProfileError("");
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            setProfileError("Оберіть файл зображення.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result;
+            if (typeof result === "string") {
+                setProfileInput((prev) => ({
+                    ...prev,
+                    avatar: result
+                }));
+            }
+        };
+        reader.onerror = () => {
+            setProfileError("Не вдалося завантажити фото.");
+        };
+        reader.readAsDataURL(file);
+        e.target.value = "";
+    }
+
+    function handleSaveProfile() {
+        setProfileError("");
+        setProfileMessage("");
+
+        const name = profileInput.name.trim();
+        const email = profileInput.email.trim();
+        const avatar = profileInput.avatar.trim();
+        const newPassword = profileInput.password;
+
+        if (!name || !email) {
+            setProfileError("Ім'я та пошта не можуть бути порожніми.");
+            return;
+        }
+
+        const storedUser = localStorage.getItem("weatherUser");
+        if (!storedUser) {
+            setProfileError("Користувача не знайдено.");
+            return;
+        }
+
+        let parsedUser;
+
+        try {
+            parsedUser = JSON.parse(storedUser);
+        } catch (err) {
+            console.warn("Stored user parse failed", err);
+            setProfileError("Помилка збережених даних.");
+            return;
+        }
+
+        if (newPassword && newPassword.length < 6) {
+            setProfileError(
+                "Новий пароль має бути щонайменше 6 символів."
+            );
+            return;
+        }
+
+        const updated = {
+            ...parsedUser,
+            name,
+            email,
+            avatar:
+                avatar ||
+                parsedUser.avatar ||
+                `https://api.dicebear.com/6.x/identicon/svg?seed=${encodeURIComponent(
+                    name
+                )}`,
+            password:
+                newPassword && newPassword.length >= 6
+                    ? newPassword
+                    : parsedUser.password
+        };
+
+        localStorage.setItem(
+            "weatherUser",
+            JSON.stringify(updated)
+        );
+        setUser({
+            name: updated.name,
+            email: updated.email,
+            avatar: updated.avatar
+        });
+        setProfileMessage("Профіль оновлено.");
+        setProfileInput((prev) => ({
+            ...prev,
+            password: ""
+        }));
+        closeProfileModal();
     }
 
     function handleBackHome() {
@@ -519,7 +810,7 @@ export default function App() {
     /* RENDER */
 
     return (
-        <div className="app">
+        <div className={darkMode ? "app dark-theme" : "app"}>
 
             {/* NAVBAR */}
 
@@ -560,9 +851,49 @@ export default function App() {
 
                 </ul>
 
-                <button className="login-btn">
-                    Login
-                </button>
+                <div className="navbar-right">
+                    <div className="theme-toggle">
+                        <label className="theme-switch">
+                            <input
+                                type="checkbox"
+                                checked={darkMode}
+                                onChange={() => setDarkMode((prev) => !prev)}
+                                aria-label="Toggle dark mode"
+                            />
+                            <span className="slider" />
+                        </label>
+                        <span className="theme-label">
+                            {darkMode ? "Dark" : "Light"}
+                        </span>
+                    </div>
+
+                    <div className="user-actions">
+                        {user ? (
+                            <button
+                                type="button"
+                                className="profile-btn"
+                                onClick={openProfileModal}
+                            >
+                            <img
+                                src={
+                                    user.avatar ||
+                                    "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"
+                                }
+                                alt={user.name}
+                                className="user-avatar"
+                            />
+                            <span>{user.name}</span>
+                        </button>
+                    ) : (
+                        <button
+                            className="auth-btn"
+                            onClick={openAuthModal}
+                        >
+                            Register
+                        </button>
+                    )}
+                </div>
+            </div>
 
                 <div
                     className="burger"
@@ -613,14 +944,6 @@ export default function App() {
                         >
                             Live radar
                         </li>
-
-                        <li
-                            onClick={() =>
-                                setMenuOpen(false)
-                            }
-                        >
-                            Login
-                        </li>
                     </ul>
                 </>
             )}
@@ -644,6 +967,345 @@ export default function App() {
           ========================= */}
 
             {page === "news" && <NewsUA />}
+
+            {authModalOpen && (
+                <>
+                    <div
+                        className="modal-overlay"
+                        onClick={closeAuthModal}
+                    />
+                    <div className="auth-modal" role="dialog" aria-modal="true">
+                        <button
+                            className="modal-close"
+                            onClick={closeAuthModal}
+                            aria-label="Close auth modal"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M6 6l12 12M18 6L6 18"
+                                    stroke="#000"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                />
+                            </svg>
+                        </button>
+
+                        <div className="auth-card">
+                            <h1>Register your account</h1>
+
+                            {authError && (
+                                <p className="error auth-error">
+                                    {authError}
+                                </p>
+                            )}
+
+                            {authSuccess && (
+                                <p className="success auth-success">
+                                    {authSuccess}
+                                </p>
+                            )}
+
+                            <form
+                                className="auth-form"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleRegister();
+                                }}
+                            >
+                                <label>
+                                    Name
+                                    <input
+                                        type="text"
+                                        value={authInput.name}
+                                        onChange={(e) =>
+                                            handleAuthChange(
+                                                "name",
+                                                e.target.value
+                                            )
+                                        }
+                                        placeholder="Your name"
+                                    />
+                                </label>
+
+                                <label>
+                                    Email
+                                    <input
+                                        type="email"
+                                        value={authInput.email}
+                                        onChange={(e) =>
+                                            handleAuthChange(
+                                                "email",
+                                                e.target.value
+                                            )
+                                        }
+                                        placeholder="you@example.com"
+                                    />
+                                </label>
+
+                                <label className="password-field">
+                                    Password
+                                    <div className="password-input-wrap">
+                                        <input
+                                            type={
+                                                showPassword
+                                                    ? "text"
+                                                    : "password"
+                                            }
+                                            value={authInput.password}
+                                            onChange={(e) =>
+                                                handleAuthChange(
+                                                    "password",
+                                                    e.target.value
+                                                )
+                                            }
+                                            placeholder="Minimum 6 characters"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="toggle-password"
+                                            onClick={() =>
+                                                setShowPassword(
+                                                    (prev) => !prev
+                                                )
+                                            }
+                                            aria-label={
+                                                showPassword
+                                                    ? "Hide password"
+                                                    : "Show password"
+                                            }
+                                        >
+                                            {showPassword ? "🙈" : "👁️"}
+                                        </button>
+                                    </div>
+                                </label>
+
+                                <div className="auth-actions">
+                                    <button type="submit" className="primary-btn">
+                                        Register
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {profileModalOpen && (
+                <>
+                    <div
+                        className="modal-overlay"
+                        onClick={closeProfileModal}
+                    />
+                    <div className="auth-modal" role="dialog" aria-modal="true">
+                        <button
+                            className="modal-close"
+                            onClick={closeProfileModal}
+                            aria-label="Close profile modal"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M6 6l12 12M18 6L6 18"
+                                    stroke="#000"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                />
+                            </svg>
+                        </button>
+
+                        <div className="auth-card">
+                            <h1>Profile</h1>
+
+                            {profileError && (
+                                <p className="error auth-error">
+                                    {profileError}
+                                </p>
+                            )}
+
+                            {profileMessage && (
+                                <p className="success auth-success">
+                                    {profileMessage}
+                                </p>
+                            )}
+
+                            <div className="profile-avatar-preview">
+                                <img
+                                    src={
+                                        profileInput.avatar ||
+                                        "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"
+                                    }
+                                    alt="Profile avatar"
+                                />
+                            </div>
+
+                            <form
+                                className="auth-form"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleSaveProfile();
+                                }}
+                            >
+                                <label>
+                                    Name
+                                    <input
+                                        type="text"
+                                        value={profileInput.name}
+                                        onChange={(e) =>
+                                            handleProfileChange(
+                                                "name",
+                                                e.target.value
+                                            )
+                                        }
+                                    />
+                                </label>
+
+                                <label>
+                                    Email
+                                    <input
+                                        type="email"
+                                        value={profileInput.email}
+                                        onChange={(e) =>
+                                            handleProfileChange(
+                                                "email",
+                                                e.target.value
+                                            )
+                                        }
+                                    />
+                                </label>
+
+                                <div className="avatar-row">
+                                    <span>Avatar</span>
+                                    <button
+                                        type="button"
+                                        className="avatar-change-btn"
+                                        onClick={() =>
+                                            setAvatarPickerOpen(
+                                                (prev) => !prev
+                                            )
+                                        }
+                                    >
+                                        {avatarPickerOpen
+                                            ? "Сховати" 
+                                            : "Змінити аватарку"}
+                                    </button>
+                                </div>
+
+                                {avatarPickerOpen && (
+                                    <div className="avatar-picker-section">
+                                        <div className="avatar-picker-header">
+                                            <span>Виберіть одну із 9 аватарок або завантажте свою</span>
+                                            <button
+                                                type="button"
+                                                className="text-btn"
+                                                onClick={() =>
+                                                    fileInputRef.current?.click()
+                                                }
+                                            >
+                                                Завантажити своє фото
+                                            </button>
+                                        </div>
+
+                                        <div className="avatar-grid">
+                                            {avatarOptions.map((src, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    className={
+                                                        profileInput.avatar === src
+                                                            ? "avatar-option active"
+                                                            : "avatar-option"
+                                                    }
+                                                    onClick={() =>
+                                                        handleProfileChange(
+                                                            "avatar",
+                                                            src
+                                                        )
+                                                    }
+                                                >
+                                                    <img
+                                                        src={src}
+                                                        alt={`Avatar ${idx + 1}`}
+                                                    />
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden-file-input"
+                                            onChange={handleAvatarFileChange}
+                                        />
+                                    </div>
+                                )}
+
+                                <label className="password-field">
+                                    New password
+                                    <div className="password-input-wrap">
+                                        <input
+                                            type={
+                                                showPassword
+                                                    ? "text"
+                                                    : "password"
+                                            }
+                                            value={profileInput.password}
+                                            onChange={(e) =>
+                                                handleProfileChange(
+                                                    "password",
+                                                    e.target.value
+                                                )
+                                            }
+                                            placeholder="Leave blank to keep current"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="toggle-password"
+                                            onClick={() =>
+                                                setShowPassword(
+                                                    (prev) => !prev
+                                                )
+                                            }
+                                            aria-label={
+                                                showPassword
+                                                    ? "Hide password"
+                                                    : "Show password"
+                                            }
+                                        >
+                                            {showPassword ? "🙈" : "👁️"}
+                                        </button>
+                                    </div>
+                                </label>
+
+                                <div className="profile-actions">
+                                    <button type="submit" className="primary-btn">
+                                        Save
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="danger-btn"
+                                        onClick={handleLogout}
+                                    >
+                                        Logout
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="secondary-btn"
+                                        onClick={closeProfileModal}
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* =========================
           HOME
@@ -689,6 +1351,7 @@ export default function App() {
                             <div className="search-box">
 
                                 <input
+                                    className="search-input"
                                     type="text"
                                     placeholder="Type a city name (e.g., Kyiv) and press Enter"
                                     value={city}
