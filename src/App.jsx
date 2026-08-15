@@ -3,10 +3,15 @@ import "./App.css";
 import NewsUA from "./NewsUA";
 
 import {
-    geoSearch,
-    getWeather,
-    getForecast,
-    getCityPhoto
+  geoSearch,
+  getWeather,
+  getForecast,
+  getCityPhoto,
+  fetchNewsUA,
+  getFavorites,
+  addFavorite as apiAddFavorite,
+  removeFavorite as apiRemoveFavorite,
+  demoAuth
 } from "./api";
 
 /* SVG ICONS */
@@ -113,6 +118,10 @@ export default function App() {
             return false;
         }
     });
+    const [favorites, setFavorites] = useState([]);
+    const [user, setUser] = useState(null);
+    const citiesCacheRef = useRef({});
+
 
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -319,6 +328,17 @@ export default function App() {
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+    useEffect(() => {
+  (async () => {
+    try {
+      const data = await getFavorites();
+      setFavorites(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Failed to load favorites", err);
+    }
+  })();
+}, []);
+
 
     /* NAVIGATION */
 
