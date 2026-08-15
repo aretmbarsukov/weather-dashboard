@@ -127,7 +127,6 @@ export default function App() {
     const [profileModalOpen, setProfileModalOpen] = useState(false);
     const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [user, setUser] = useState(null);
     const [authInput, setAuthInput] = useState({
         name: "",
         email: "",
@@ -176,7 +175,6 @@ export default function App() {
     /* DEFAULT CITIES */
 
     const [citiesData, setCitiesData] = useState([]);
-    const citiesCacheRef = useRef({});
 
     /* MODAL */
 
