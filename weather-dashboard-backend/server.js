@@ -1,142 +1,142 @@
+// server.js
 import express from "express";
-import cors from "cors";
 import mongoose from "mongoose";
-import bodyParser from "body-parser";
 import { randomUUID } from "crypto";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// --- MongoDB connection (safe)
-const mongoUrl = process.env.MONGO_URL || "";
+/* ---------- Config / Env ---------- */
+const PORT = process.env.PORT || 10000;
+const MONGO_URL = process.env.MONGO_URL || "";
+const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
+const JWT_EXPIRES = "7d";
 
-let FavoriteModel = null;
+/* ---------- Mongo connection ---------- */
 let usingMongo = false;
-
-if (mongoUrl) {
+if (MONGO_URL) {
   mongoose
-    .connect(mongoUrl)
+    .connect(MONGO_URL, { dbName: "weather-dashboard" })
     .then(() => {
       console.log("Mongo connected");
       usingMongo = true;
-
-      // Define schema and model after successful connection
-      const favoriteSchema = new mongoose.Schema({
-        name: String,
-        lat: Number,
-        lon: Number,
-        createdAt: { type: Date, default: Date.now },
-      });
-
-      FavoriteModel = mongoose.models.Favorite || mongoose.model("Favorite", favoriteSchema);
     })
     .catch((err) => {
-      console.error("Mongo error", err);
-      console.warn("Continuing without MongoDB; using in-memory store");
+      console.error("Mongo connection error:", err.message || err);
       usingMongo = false;
     });
-} else {
-  console.warn("MONGO_URL not set — running without MongoDB; using in-memory store");
 }
 
-// --- In-memory fallback store
-const memoryStore = {
-  favorites: [],
-};
-
-// Helper to normalize favorite objects
-function normalizeFavorite(obj) {
-  return {
-    id: obj._id || obj.id || obj._id?.toString?.() || randomUUID(),
-    name: obj.name || "",
-    lat: typeof obj.lat === "number" ? obj.lat : null,
-    lon: typeof obj.lon === "number" ? obj.lon : null,
-    createdAt: obj.createdAt || new Date(),
-  };
+/* ---------- User model (mongoose) ---------- */
+let UserModel = null;
+const userSchema = new mongoose.Schema({
+  email: { type: String, unique: true, required: true },
+  passwordHash: String,
+  name: String,
+  createdAt: { type: Date, default: Date.now },
+});
+try {
+  UserModel = mongoose.models.User || mongoose.model("User", userSchema);
+} catch (e) {
+  UserModel = mongoose.model("User", userSchema);
 }
 
-// --- Routes
+/* ---------- In-memory fallback ---------- */
+const memoryUsers = [];
 
-// Health
+/* ---------- Helpers ---------- */
+function createToken(user) {
+  return jwt.sign(
+    { id: user._id?.toString?.() || user.id, email: user.email, name: user.name },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES }
+  );
+}
+
+/* ---------- Health endpoint ---------- */
 app.get("/health", (req, res) => {
   res.json({ status: "ok", mongo: usingMongo });
 });
 
-// Demo auth: creates a demo user object (no real auth)
-app.post("/auth/demo", (req, res) => {
-  const demoUser = {
-    id: `demo-${randomUUID()}`,
-    name: "Demo User",
-    createdAt: new Date(),
-  };
-  res.json({ user: demoUser });
-});
-
-// Get favorites
-app.get("/favorites", async (req, res) => {
+/* ---------- Auth: register ---------- */
+app.post("/auth/register", async (req, res) => {
   try {
-    if (usingMongo && FavoriteModel) {
-      const docs = await FavoriteModel.find().sort({ createdAt: -1 }).lean();
-      return res.json(docs.map((d) => ({ id: d._id, name: d.name, lat: d.lat, lon: d.lon, createdAt: d.createdAt })));
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: "Missing email or password" });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    if (usingMongo) {
+      const existing = await UserModel.findOne({ email }).lean();
+      if (existing) return res.status(409).json({ error: "User exists" });
+      const user = await UserModel.create({ email, passwordHash, name });
+      const token = createToken(user);
+      return res.status(201).json({ user: { id: user._id, email: user.email, name: user.name }, token });
     } else {
-      return res.json(memoryStore.favorites.map(normalizeFavorite));
+      if (memoryUsers.find((u) => u.email === email)) return res.status(409).json({ error: "User exists" });
+      const user = { id: randomUUID(), email, passwordHash, name, createdAt: new Date() };
+      memoryUsers.push(user);
+      const token = createToken(user);
+      return res.status(201).json({ user: { id: user.id, email: user.email, name: user.name }, token });
     }
   } catch (err) {
-    console.error("GET /favorites error", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("register error:", err);
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
-// Add favorite
-app.post("/favorites", async (req, res) => {
+/* ---------- Auth: login ---------- */
+app.post("/auth/login", async (req, res) => {
   try {
-    const { name, lat, lon } = req.body || {};
-    if (!name) return res.status(400).json({ error: "Missing name" });
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: "Missing email or password" });
 
-    if (usingMongo && FavoriteModel) {
-      const doc = await FavoriteModel.create({ name, lat, lon });
-      return res.status(201).json({ id: doc._id, name: doc.name, lat: doc.lat, lon: doc.lon, createdAt: doc.createdAt });
+    let user;
+    if (usingMongo) {
+      user = await UserModel.findOne({ email });
+      if (!user) return res.status(401).json({ error: "Invalid credentials" });
+      const ok = await bcrypt.compare(password, user.passwordHash);
+      if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+      const token = createToken(user);
+      return res.json({ user: { id: user._id, email: user.email, name: user.name }, token });
     } else {
-      const item = { id: randomUUID(), name, lat: typeof lat === "number" ? lat : null, lon: typeof lon === "number" ? lon : null, createdAt: new Date() };
-      memoryStore.favorites.unshift(item);
-      return res.status(201).json(item);
+      user = memoryUsers.find((u) => u.email === email);
+      if (!user) return res.status(401).json({ error: "Invalid credentials" });
+      const ok = await bcrypt.compare(password, user.passwordHash);
+      if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+      const token = createToken(user);
+      return res.json({ user: { id: user.id, email: user.email, name: user.name }, token });
     }
   } catch (err) {
-    console.error("POST /favorites error", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("login error:", err);
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
-// Remove favorite
-app.delete("/favorites/:id", async (req, res) => {
+/* ---------- Auth middleware ---------- */
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
+  const token = auth.split(" ")[1];
   try {
-    const id = req.params.id;
-    if (!id) return res.status(400).json({ error: "Missing id" });
-
-    if (usingMongo && FavoriteModel) {
-      const result = await FavoriteModel.findByIdAndDelete(id);
-      if (!result) return res.status(404).json({ error: "Not found" });
-      return res.json({ success: true });
-    } else {
-      const before = memoryStore.favorites.length;
-      memoryStore.favorites = memoryStore.favorites.filter((f) => (f.id || f._id) !== id && String(f._id || f.id) !== String(id));
-      if (memoryStore.favorites.length === before) return res.status(404).json({ error: "Not found" });
-      return res.json({ success: true });
-    }
-  } catch (err) {
-    console.error("DELETE /favorites/:id error", err);
-    return res.status(500).json({ error: "Internal server error" });
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: "Invalid token" });
   }
+}
+
+/* ---------- Example protected route ---------- */
+app.get("/me", authMiddleware, (req, res) => {
+  res.json({ user: req.user });
 });
 
-// Fallback for unknown routes
-app.use((req, res) => {
-  res.status(404).json({ error: "Not found" });
-});
+/* ---------- Fallback 404 (last) ---------- */
+app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
-// Start server
-const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+/* ---------- Start server ---------- */
+app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
