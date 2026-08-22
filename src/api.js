@@ -1,3 +1,7 @@
+// src/api.js
+// Вбудовуємо базовий URL бекенду через змінну середовища
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
 // ===============================
 // API KEYS
 // ===============================
@@ -114,4 +118,58 @@ export async function fetchNewsUA() {
   }
 
   return all;
+}
+
+// ===============================
+// BACKEND (favorites / auth) — використовуємо API_BASE
+// ===============================
+export async function getFavorites() {
+  try {
+    const res = await fetch(`${API_BASE}/favorites`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.warn("getFavorites error", err);
+    return [];
+  }
+}
+
+export async function addFavorite(payload) {
+  try {
+    const res = await fetch(`${API_BASE}/favorites`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Failed to add favorite");
+    return await res.json();
+  } catch (err) {
+    console.warn("addFavorite error", err);
+    throw err;
+  }
+}
+
+export async function removeFavorite(id) {
+  try {
+    const res = await fetch(`${API_BASE}/favorites/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to remove favorite");
+    return true;
+  } catch (err) {
+    console.warn("removeFavorite error", err);
+    throw err;
+  }
+}
+
+// Простий demo auth (як у прикладі App.jsx)
+export async function demoAuth() {
+  try {
+    const res = await fetch(`${API_BASE}/auth/demo`, { method: "POST" });
+    if (!res.ok) throw new Error("Auth failed");
+    return await res.json();
+  } catch (err) {
+    console.warn("demoAuth error", err);
+    throw err;
+  }
 }
